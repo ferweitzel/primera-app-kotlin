@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,23 +27,33 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.app_kotlin.trivia.Question
+import com.example.app_kotlin.trivia.QuizViewModel
 import com.example.app_kotlin.ui.theme.AppkotlinTheme
 
 class TriviaAppActivity : ComponentActivity() {
+
+    private val quizViewModel: QuizViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             AppkotlinTheme {
-                TriviaScreen(onBack = { finish() })
+                val uiState by quizViewModel.uiState.collectAsState()
+                TriviaScreen(
+                    uiState = uiState,
+                    onSelectOption = { quizViewModel.onSelectOption(it) },
+                    onConfirm = { quizViewModel.onConfirm() },
+                    onPlayAgain = { quizViewModel.onPlayAgain() },
+                    onBack = { finish() }
+                )
             }
         }
     }
@@ -50,9 +61,13 @@ class TriviaAppActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TriviaScreen(onBack: () -> Unit) {
-    var isFinished by remember { mutableStateOf(false) }
-
+fun TriviaScreen(
+    uiState: com.example.app_kotlin.trivia.QuizUiState,
+    onSelectOption: (Int) -> Unit,
+    onConfirm: () -> Unit,
+    onPlayAgain: () -> Unit,
+    onBack: () -> Unit
+) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -82,17 +97,35 @@ fun TriviaScreen(onBack: () -> Unit) {
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            if (isFinished) {
-                FinishedScreen(onPlayAgain = { isFinished = false })
+            if (uiState.isFinished) {
+                FinishedScreen(
+                    score = uiState.score,
+                    total = uiState.questions.size,
+                    onPlayAgain = onPlayAgain
+                )
             } else {
-                QuestionScreen(onFinish = { isFinished = true })
+                QuestionScreen(
+                    question = uiState.currentQuestion,
+                    currentIndex = uiState.currentIndex,
+                    total = uiState.questions.size,
+                    selectedIndex = uiState.selectedIndex,
+                    onSelectOption = onSelectOption,
+                    onConfirm = onConfirm
+                )
             }
         }
     }
 }
 
 @Composable
-fun QuestionScreen(onFinish: () -> Unit) {
+fun QuestionScreen(
+    question: Question,
+    currentIndex: Int,
+    total: Int,
+    selectedIndex: Int?,
+    onSelectOption: (Int) -> Unit,
+    onConfirm: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -100,25 +133,25 @@ fun QuestionScreen(onFinish: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            text = "Pregunta 1 de 5",
+            text = "Pregunta ${currentIndex + 1} de $total",
             style = MaterialTheme.typography.titleMedium
         )
         Text(
-            text = "Pregunta 1 ABC",
+            text = question.title,
             style = MaterialTheme.typography.headlineSmall
         )
-        var selectedOption by remember { mutableStateOf<Int?>(null) }
-        repeat(4) { index ->
+
+        question.options.forEachIndexed { index, option ->
             Row(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 RadioButton(
-                    selected = selectedOption == index,
-                    onClick = { selectedOption = index }
+                    selected = selectedIndex == index,
+                    onClick = { onSelectOption(index) }
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Respuesta ${index + 1} de la pregunta 1",
+                    text = option,
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -127,9 +160,9 @@ fun QuestionScreen(onFinish: () -> Unit) {
         Spacer(Modifier.weight(1f))
 
         Button(
-            onClick = onFinish,
+            onClick = onConfirm,
             modifier = Modifier.fillMaxWidth(),
-            enabled = selectedOption != null
+            enabled = selectedIndex != null
         ) {
             Text(text = "Confirmar")
         }
@@ -137,7 +170,11 @@ fun QuestionScreen(onFinish: () -> Unit) {
 }
 
 @Composable
-fun FinishedScreen(onPlayAgain: () -> Unit) {
+fun FinishedScreen(
+    score: Int,
+    total: Int,
+    onPlayAgain: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -145,7 +182,7 @@ fun FinishedScreen(onPlayAgain: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "¡Has terminado!")
+        Text(text = "Puntuación final: $score de $total")
         Button(onClick = onPlayAgain) {
             Text(text = "Jugar de nuevo")
         }
