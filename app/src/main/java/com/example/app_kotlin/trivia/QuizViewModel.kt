@@ -17,30 +17,43 @@ class QuizViewModel : ViewModel() {
 
     fun onSelectOption(index: Int) {
         val current = _uiState.value
-        if (current.isFinished) return
+        if (current.isFinished || current.showFeedback) return
         _uiState.value = current.copy(selectedIndex = index)
     }
 
     fun onConfirm() {
         val current = _uiState.value
-        if (current.selectedIndex == null) return
+        val selected = current.selectedIndex ?: return
+        val question = current.currentQuestion ?: return
 
-        val isCorrect = current.currentQuestion.correctIndex == current.selectedIndex
-        val newScore = if (isCorrect) current.score + 1 else current.score
-
-        if (current.currentIndex < current.questions.size - 1) {
-            _uiState.value = current.copy(
-                score = newScore,
-                currentIndex = current.currentIndex + 1,
-                selectedIndex = null
-            )
+        val isCorrect = selected == question.correctIndex
+        val newScore = if (isCorrect) current.score + 100 else current.score
+        
+        val feedbackText = if (isCorrect) {
+            "✅ Correcto"
         } else {
-            _uiState.value = current.copy(
-                score = newScore,
-                isFinished = true,
-                selectedIndex = null
-            )
+            "❌ Incorrecto. Respuesta correcta: ${question.options[question.correctIndex]}"
         }
+
+        _uiState.value = current.copy(
+            score = newScore,
+            showFeedback = true,
+            feedback = feedbackText
+        )
+    }
+
+    fun onNextQuestion() {
+        val current = _uiState.value
+        val nextIndex = current.currentIndex + 1
+        val isFinished = nextIndex >= current.questions.size
+
+        _uiState.value = current.copy(
+            currentIndex = if (isFinished) current.currentIndex else nextIndex,
+            selectedIndex = null,
+            isFinished = isFinished,
+            showFeedback = false,
+            feedback = ""
+        )
     }
 
     fun onPlayAgain() {
@@ -51,14 +64,14 @@ class QuizViewModel : ViewModel() {
         return listOf(
             Question(
                 id = 1,
-                title = "¿Qué palabra clave se usa para declarar una variable unmutable en Kotlin?",
+                title = "¿Qué palabra clave se usa para declarar una variable inmutable en Kotlin?",
                 options = listOf("var", "val", "let", "const"),
                 correctIndex = 1
             ),
             Question(
                 id = 2,
-                title = "En Jetpack Compose,¿qué anotación marca una función como UI?",
-                options = listOf("@UI", "@widget", "@composable", "@Compose"),
+                title = "En Jetpack Compose, ¿qué anotación marca una función como UI?",
+                options = listOf("@UI", "@widget", "@Composable", "@Compose"),
                 correctIndex = 2
             ),
             Question(
@@ -69,9 +82,21 @@ class QuizViewModel : ViewModel() {
             ),
             Question(
                 id = 4,
-                title = "¿Qué instrucción que permite restaurar estado tras recreación de Activity es?",
-                options = listOf("intentData", "savedInstanceState", "activityState", "bundleConfig"),
+                title = "¿Qué instrucción permite restaurar el estado tras la recreación de una Activity?",
+                options = listOf("intentData", "rememberSaveable", "activityState", "bundleConfig"),
                 correctIndex = 1
+            ),
+            Question(
+                id = 5,
+                title = "¿Cómo se define una función en Kotlin?",
+                options = listOf("func", "define", "fun", "function"),
+                correctIndex = 2
+            ),
+            Question(
+                id = 6,
+                title = "¿Cuál es el punto de entrada principal en una aplicación Android?",
+                options = listOf("onCreate", "onStart", "main", "init"),
+                correctIndex = 0
             )
         )
     }

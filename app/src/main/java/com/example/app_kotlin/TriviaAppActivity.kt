@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -33,7 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.example.app_kotlin.trivia.Question
+import com.example.app_kotlin.trivia.QuizUiState
 import com.example.app_kotlin.trivia.QuizViewModel
 import com.example.app_kotlin.ui.theme.AppkotlinTheme
 
@@ -46,12 +47,10 @@ class TriviaAppActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             AppkotlinTheme {
-                val uiState by quizViewModel.uiState.collectAsState()
+                val state by quizViewModel.uiState.collectAsState()
                 TriviaScreen(
-                    uiState = uiState,
-                    onSelectOption = { quizViewModel.onSelectOption(it) },
-                    onConfirm = { quizViewModel.onConfirm() },
-                    onPlayAgain = { quizViewModel.onPlayAgain() },
+                    state = state,
+                    viewModel = quizViewModel,
                     onBack = { finish() }
                 )
             }
@@ -62,10 +61,8 @@ class TriviaAppActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TriviaScreen(
-    uiState: com.example.app_kotlin.trivia.QuizUiState,
-    onSelectOption: (Int) -> Unit,
-    onConfirm: () -> Unit,
-    onPlayAgain: () -> Unit,
+    state: QuizUiState,
+    viewModel: QuizViewModel,
     onBack: () -> Unit
 ) {
     Scaffold(
@@ -97,20 +94,17 @@ fun TriviaScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
         ) {
-            if (uiState.isFinished) {
+            if (state.isFinished) {
                 FinishedScreen(
-                    score = uiState.score,
-                    total = uiState.questions.size,
-                    onPlayAgain = onPlayAgain
+                    score = state.score,
+                    total = state.questions.size * 100,
+                    onPlayAgain = viewModel::onPlayAgain
                 )
             } else {
                 QuestionScreen(
-                    question = uiState.currentQuestion,
-                    currentIndex = uiState.currentIndex,
-                    total = uiState.questions.size,
-                    selectedIndex = uiState.selectedIndex,
-                    onSelectOption = onSelectOption,
-                    onConfirm = onConfirm
+                    state = state,
+                    onSelectOption = viewModel::onSelectOption,
+                    onConfirm = if (state.showFeedback) viewModel::onNextQuestion else viewModel::onConfirm
                 )
             }
         }
@@ -119,52 +113,70 @@ fun TriviaScreen(
 
 @Composable
 fun QuestionScreen(
-    question: Question,
-    currentIndex: Int,
-    total: Int,
-    selectedIndex: Int?,
+    state: QuizUiState,
     onSelectOption: (Int) -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = "Pregunta ${currentIndex + 1} de $total",
-            style = MaterialTheme.typography.titleMedium
-        )
-        Text(
-            text = question.title,
-            style = MaterialTheme.typography.headlineSmall
-        )
+    val question = state.currentQuestion
+    val currentIndex = state.currentIndex
+    val selectedIndex = state.selectedIndex
 
-        question.options.forEachIndexed { index, option ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(
-                    selected = selectedIndex == index,
-                    onClick = { onSelectOption(index) }
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+    if (question != null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Pregunta ${currentIndex + 1} de ${state.questions.size}",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = question.title,
+                style = MaterialTheme.typography.headlineSmall
+            )
+
+            question.options.forEachIndexed { index, option ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(
+                        selected = selectedIndex == index,
+                        onClick = { if (!state.showFeedback) onSelectOption(index) },
+                        enabled = !state.showFeedback
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+            }
+
+            if (state.showFeedback) {
                 Text(
-                    text = option,
-                    style = MaterialTheme.typography.bodyLarge
+                    text = state.feedback,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (state.feedback.startsWith("✅")) Color(0xFF4CAF50) else Color(0xFFF44336)
                 )
             }
-        }
 
-        Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
 
-        Button(
-            onClick = onConfirm,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = selectedIndex != null
-        ) {
-            Text(text = "Confirmar")
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedIndex != null || state.showFeedback
+            ) {
+                val buttonText = when {
+                    state.showFeedback && state.isLastQuestion -> "Ver resultados"
+                    state.showFeedback -> "Siguiente"
+                    state.isLastQuestion -> "Ver resultados"
+                    else -> "Confirmar"
+                }
+                Text(text = buttonText)
+            }
         }
     }
 }
@@ -178,11 +190,21 @@ fun FinishedScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Puntuación final: $score de $total")
+        Text(text = "¡Quiz Finalizado!",
+             style = MaterialTheme.typography.headlineMedium)
+
+        Spacer(modifier = Modifier.height(48.dp))
+
+        Text(
+            text = "Tu puntuación final es: $score / $total",
+             style = MaterialTheme.typography.titleLarge
+        )
+        Spacer(modifier = Modifier.height(48.dp))
+
         Button(onClick = onPlayAgain) {
             Text(text = "Jugar de nuevo")
         }
